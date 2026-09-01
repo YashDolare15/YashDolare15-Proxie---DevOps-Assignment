@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Proxie Robot Bridge",
+  "version": "1.0.0",
+  "description": "Bridges the Proxie robot webpage with a local Python WebSocket bridge.",
+  "host_permissions": [
+    "https://yashdolare15.github.io/Proxie---DevOps-Assignment/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://yashdolare15.github.io/Proxie---DevOps-Assignment/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
