@@ -23,7 +23,7 @@ Python can read the robot's live state and send movement commands to the robot.
 - Push `index.html` to GitHub.
 - Enable GitHub Pages.
 - Open the publicly hosted robot webpage.
-
+- Live Static Website: https://yashdolare15.github.io/YashDolare15-Proxie---DevOps-Assignment/
 ### Step 2: Create the Python Bridge
 
 Create a virtual environment:
