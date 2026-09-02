@@ -1,193 +1,121 @@
+// background.js
+// WebSocket bridge between the hosted page and local Python.
+//
+// Hosted page -> content.js -> this service worker -> Python
+// Python -> this service worker -> content.js -> hosted page
+
+const PYTHON_WS_URL = "ws://127.0.0.1:8765";
+
 let socket = null;
 let reconnectTimer = null;
-
-const PYTHON_WS_URL =
-    "ws://127.0.0.1:8765";
-
+let activeTabId = null;
 
 function connectToPython() {
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN ||
+     socket.readyState === WebSocket.CONNECTING)
+  ) {
+    return;
+  }
 
-    if (
-        socket &&
-        (
-            socket.readyState === WebSocket.OPEN ||
-            socket.readyState === WebSocket.CONNECTING
-        )
-    ) {
-        return;
-    }
+  try {
+    socket = new WebSocket(PYTHON_WS_URL);
 
-    console.log(
-        "[Proxie Bridge] Connecting to Python..."
-    );
+    socket.addEventListener("open", () => {
+      console.log("[Bridge] Connected to local Python.");
+    });
 
-    socket = new WebSocket(
-        PYTHON_WS_URL
-    );
+    socket.addEventListener("message", (event) => {
+      try {
+        const data = JSON.parse(event.data);
 
-
-    socket.addEventListener(
-        "open",
-        () => {
-
-            console.log(
-                "[Proxie Bridge] Connected to Python"
-            );
-
+        if (data.type !== "robot-command") {
+          return;
         }
-    );
 
-
-    socket.addEventListener(
-        "message",
-        (event) => {
-
-            try {
-
-                const data =
-                    JSON.parse(event.data);
-
-                console.log(
-                    "[Proxie Bridge] Python -> Extension:",
-                    data
-                );
-
-
-                if (
-                    data.type ===
-                    "robot-command"
-                ) {
-
-                    chrome.tabs.query(
-                        {},
-                        (tabs) => {
-
-                            for (
-                                const tab
-                                of tabs
-                            ) {
-
-                                if (!tab.id) {
-                                    continue;
-                                }
-
-                                chrome.tabs.sendMessage(
-                                    tab.id,
-                                    data
-                                ).catch(
-                                    () => {}
-                                );
-
-                            }
-
-                        }
-                    );
-
-                }
-
-            } catch (error) {
-
-                console.error(
-                    "[Proxie Bridge] Invalid message:",
-                    error
-                );
-
-            }
-
+        if (activeTabId === null) {
+          console.warn("[Bridge] No active robot tab.");
+          return;
         }
-    );
 
+        chrome.tabs.sendMessage(
+          activeTabId,
+          data
+        ).catch(() => {
+          // The tab may have navigated or closed.
+        });
 
-    socket.addEventListener(
-        "close",
-        () => {
+      } catch (error) {
+        console.error("[Bridge] Invalid message from Python:", error);
+      }
+    });
 
-            console.log(
-                "[Proxie Bridge] Python disconnected."
-            );
+    socket.addEventListener("close", () => {
+      console.log("[Bridge] Python disconnected.");
+      socket = null;
+      scheduleReconnect();
+    });
 
-            reconnect();
+    socket.addEventListener("error", () => {
+      console.warn("[Bridge] WebSocket connection error.");
+    });
 
-        }
-    );
-
-
-    socket.addEventListener(
-        "error",
-        (error) => {
-
-            console.error(
-                "[Proxie Bridge] WebSocket error:",
-                error
-            );
-
-        }
-    );
+  } catch (error) {
+    console.error("[Bridge] Could not create WebSocket:", error);
+    scheduleReconnect();
+  }
 }
 
+function scheduleReconnect() {
+  if (reconnectTimer !== null) {
+    return;
+  }
 
-function reconnect() {
-
-    if (reconnectTimer !== null) {
-        return;
-    }
-
-    reconnectTimer = setTimeout(
-        () => {
-
-            reconnectTimer = null;
-
-            connectToPython();
-
-        },
-        2000
-    );
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectToPython();
+  }, 1000);
 }
 
+function sendToPython(data) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(data));
+  }
+}
 
-chrome.runtime.onMessage.addListener(
-    (message) => {
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (!message) return;
 
-        if (!message) {
-            return;
-        }
+  if (sender.tab && sender.tab.id !== undefined) {
+    activeTabId = sender.tab.id;
+  }
 
+  if (message.type === "page-ready") {
+    connectToPython();
 
-        if (
-            message.type ===
-            "robot-state"
-        ) {
+    sendToPython({
+      type: "page-ready"
+    });
 
-            if (
-                socket &&
-                socket.readyState ===
-                WebSocket.OPEN
-            ) {
+    return;
+  }
 
-                socket.send(
-                    JSON.stringify({
+  if (message.type === "robot-state") {
+    sendToPython({
+      type: "robot-state",
+      x: Number(message.x ?? 0),
+      z: Number(message.z ?? 0),
+      rotationY: Number(message.rotationY ?? 0),
+      timestamp: Number(message.timestamp ?? Date.now())
+    });
+  }
+});
 
-                        type:
-                            "robot-state",
-
-                        x:
-                            message.x,
-
-                        z:
-                            message.z,
-
-                        rotationY:
-                            message.rotationY
-
-                    })
-                );
-
-            }
-
-        }
-
-    }
-);
-
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === activeTabId) {
+    activeTabId = null;
+  }
+});
 
 connectToPython();
