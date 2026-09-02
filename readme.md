@@ -112,3 +112,12 @@ We chose a Chrome Extension + WebSocket because it provides real-time, two-way c
 The Chrome Extension handles communication with the webpage, while WebSocket connects the extension to Python. This approach is simple, lightweight, and suitable for continuous robot state updates and movement commands.
 
 The main trade-offs are that the Chrome Extension requires browser permissions and the local Python bridge must be running during the demo.
+
+
+### Trade-offs
+
+* **Latency:** WebSocket provides low-latency, real-time communication.
+* **Security:** The bridge is restricted to `127.0.0.1`.
+* **Permissions:** Chrome Extension requires webpage access permissions.
+* **Setup:** Requires loading the extension and running the local Python bridge.
+
